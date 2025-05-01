@@ -85,13 +85,11 @@ def calculate_is_early_finish(df):
             continue
     return df
 
-
-
-    # Iteramos desde la segunda fila
+def calculate_racha_early_finish(df):
+    df['racha_early_finish'] = 0
     for i in range(1, len(df)):
-        if df.at[i, 'reason_trackdone'] == 1 and df.at[i-1, 'reason_trackdone'] == 0:
-            if df.at[i, 'ts'] < df.at[i-1, 'ts'] + pd.Timedelta(milliseconds=df.at[i-1, 'duration_ms']):
-                df.at[i, 'is_early_finish'] = 1
+        if df.at[i, 'is_early_finish'] == 1:
+            df.at[i, 'racha_early_finish'] = df.at[i-1, 'racha_early_finish'] + 1
     return df
 
 def racha_razon_hasta_ahora(df, razon:str):
@@ -265,6 +263,7 @@ def procesar_df(df, diccionario):
     get_is_iphone(df)
     df = calculate_durations(df, diccionario)
     df = calculate_is_early_finish(df)
+    df = calculate_racha_early_finish(df)
     df = encode_reasons_muchas(df)
     #df = racha_razon_hasta_ahora(df, 'fwdbtn')
     #df = racha_razon_hasta_ahora(df, 'trackdone')
