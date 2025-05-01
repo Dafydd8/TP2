@@ -113,6 +113,22 @@ def calculate_prop_fwdbtn_periodo(df, periodo:int):
         df.at[i, new_col] = suma / len(obs) if len(obs) > 0 else 0
     return df
 
+def calculate_prop_reason_periodo_rolling(df, periodo:int, reason):
+    new_col = f'{reason}_prop_{periodo}'
+    df = df.set_index('ts').sort_index()
+    
+    # rolling count and rolling sum sobre los últimos `periodo` minutos
+    ventana = f'{periodo}T'   # 'T' indica minutos
+    suma = df[f'reason_{reason}'].rolling(ventana).sum()
+    conteo = df[f'reason_{reason}'].rolling(ventana).count()
+    
+    df[new_col] = (suma / conteo).fillna(0)
+    
+    # volver a poner ts como columna
+    df = df.reset_index()
+    return df
+
+
 def get_spotify_auth():
     '''
     Configura la autenticación de Spotify utilizando Spotipy y devuelve el objeto de autenticación.
@@ -217,11 +233,13 @@ def procesar_df(df, diccionario):
     separate_ts(df)
     get_is_iphone(df)
     df = encode_reasons_muchas(df)
-    df = racha_razon_hasta_ahora(df, 'fwdbtn')
-    df = racha_razon_hasta_ahora(df, 'trackdone')
-    df = es_racha(df, 'fwdbtn')
-    df = es_racha(df, 'trackdone')
-    df = calculate_prop_fwdbtn_periodo(df, 30)
+    #df = racha_razon_hasta_ahora(df, 'fwdbtn')
+    #df = racha_razon_hasta_ahora(df, 'trackdone')
+    #df = es_racha(df, 'fwdbtn')
+    #df = es_racha(df, 'trackdone')
+    df = calculate_prop_reason_periodo_rolling(df, 10, 'fwdbtn')
+    df = calculate_prop_reason_periodo_rolling(df, 10, 'trackdone')
+    df = calculate_prop_reason_periodo_rolling(df, 10, 'playbtn')
     df = calculate_durations(df, diccionario)
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
