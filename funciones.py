@@ -92,6 +92,27 @@ def es_racha(df, razon):
             df.at[i, new_col] = 1
     return df
 
+def calculate_prop_fwdbtn_periodo(df, periodo:int):
+    '''
+    Requiere: df esta ordenado por 'ts'.
+    Calcula la proporción de fwdbtn en los últimos 'periodo' minutos y lo añade al DataFrame 'df'.
+    '''
+    # Inicializamos la columna en 0
+    new_col = f'fwdbtn_prop_{periodo}'
+    df[new_col] = 0
+    
+    # Iteramos desde la segunda fila
+    for i in range(1, len(df)):
+        ts_actual = df.at[i, 'ts']
+        delta = pd.Timedelta(minutes=periodo)
+        obs = df[(df['ts'] >= ts_actual - delta) & (df['ts'] <= ts_actual)]
+        suma = 0
+        for j in range(len(obs)):
+            if obs.iloc[j]['reason_fwdbtn'] == 1:
+                suma += 1
+        df.at[i, new_col] = suma / len(obs) if len(obs) > 0 else 0
+    return df
+
 def get_spotify_auth():
     '''
     Configura la autenticación de Spotify utilizando Spotipy y devuelve el objeto de autenticación.
@@ -200,6 +221,7 @@ def procesar_df(df, diccionario):
     df = racha_razon_hasta_ahora(df, 'trackdone')
     df = es_racha(df, 'fwdbtn')
     df = es_racha(df, 'trackdone')
+    df = calculate_prop_fwdbtn_periodo(df, 30)
     df = calculate_durations(df, diccionario)
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
