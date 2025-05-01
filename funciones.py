@@ -63,6 +63,37 @@ def encode_reasons_muchas(df):
     df = df.drop(columns=['reason_start'])
     return df
 
+def calculate_is_early_finish(df):
+    '''
+    Requiere: df esta ordenado por 'ts'.
+    Calcula si la canción se terminó antes de lo esperado.
+    Añade una columna 'is_early_finish' al DataFrame 'df'.
+    '''
+    # Inicializamos la columna en 0
+    df['is_early_finish'] = 0
+    for i in range(1, len(df)):
+        ts_actual = df.at[i, 'ts']
+        ts_anterior = df.at[i-1, 'ts']
+        try:
+            reproducciones_seguidas = df.at[i, 'reason_start'] in ['fwdbtn', 'trackdone', 'backbtn', 'trackerror', 'unknown']
+            d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
+            if reproducciones_seguidas:
+                if ts_actual-d < ts_anterior:
+                    df.at[i, 'is_early_finish'] = 1
+        except:
+            #print('No se encontró duration_ms para la canción')
+            continue
+    return df
+
+
+
+    # Iteramos desde la segunda fila
+    for i in range(1, len(df)):
+        if df.at[i, 'reason_trackdone'] == 1 and df.at[i-1, 'reason_trackdone'] == 0:
+            if df.at[i, 'ts'] < df.at[i-1, 'ts'] + pd.Timedelta(milliseconds=df.at[i-1, 'duration_ms']):
+                df.at[i, 'is_early_finish'] = 1
+    return df
+
 def racha_razon_hasta_ahora(df, razon:str):
     '''
     Requiere: df esta ordenado por 'ts'.
@@ -232,15 +263,19 @@ def procesar_df(df, diccionario):
     df = sort_by_ts(df)
     separate_ts(df)
     get_is_iphone(df)
+    df = calculate_durations(df, diccionario)
+    df = calculate_is_early_finish(df)
     df = encode_reasons_muchas(df)
     #df = racha_razon_hasta_ahora(df, 'fwdbtn')
     #df = racha_razon_hasta_ahora(df, 'trackdone')
     #df = es_racha(df, 'fwdbtn')
     #df = es_racha(df, 'trackdone')
-    df = calculate_prop_reason_periodo_rolling(df, 10, 'fwdbtn')
-    df = calculate_prop_reason_periodo_rolling(df, 10, 'trackdone')
-    df = calculate_prop_reason_periodo_rolling(df, 10, 'playbtn')
-    df = calculate_durations(df, diccionario)
+    # for reason in ['fwdbtn', 'trackdone', 'clickrow      ', ]:
+    #     df = racha_razon_hasta_ahora(df, reason)
+    #     df = es_racha(df, reason)
+    # df = calculate_prop_reason_periodo_rolling(df, 10, 'fwdbtn')
+    # df = calculate_prop_reason_periodo_rolling(df, 10, 'trackdone')
+    # df = calculate_prop_reason_periodo_rolling(df, 10, 'playbtn')
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
     return df
