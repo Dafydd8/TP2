@@ -3,6 +3,13 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from sklearn.preprocessing import PolynomialFeatures
 
+def sort_by_ts(df):
+    '''
+    Ordena el DataFrame 'df' por la columna 'ts' y resetea el índice.
+    '''
+    df = df.sort_values('ts').reset_index(drop=True)
+    return df
+
 def separate_ts(df):
     '''
     Separa la columna 'ts' en varias columnas: 'hour', 'day_of_week', 'month', 'year'.
@@ -37,8 +44,17 @@ def encode_reasons_muchas(df):
     '''
     Codifica la columna 'reason_start' con  One Hot Encoding.
     '''
+    expected_columns = ['reason_appload', 'reason_backbtn', 'reason_clickrow',
+    'reason_fwdbtn', 'reason_playbtn', 'reason_remote', 'reason_trackdone',
+    'reason_trackerror', 'reason_unknown']
     # Aplicar One-Hot Encoding a razon de reproduccion
     df_encoded = pd.get_dummies(df['reason_start'], prefix='reason', dummy_na=False)
+    for col in expected_columns:
+        if col not in df_encoded.columns:
+            df_encoded[col] = 0
+
+    # 
+    df_encoded = df_encoded[expected_columns]
 
     # Concatenar el dfFrame original con el nuevo dfFrame de variables codificadas
     df = pd.concat([df, df_encoded], axis=1)
@@ -175,7 +191,8 @@ def procesar_df(df, diccionario):
     cálculo de rachas, obtención de duraciones y combinaciones polinómicas.
     DF QUEDA ORDEADO POR 'ts'!
     '''
-    df = df.sort_values('ts').reset_index(drop=True)
+    df = df.drop(columns=['username', 'conn_country', 'user_agent_decrypted'])
+    df = sort_by_ts(df)
     separate_ts(df)
     get_is_iphone(df)
     df = encode_reasons_muchas(df)
