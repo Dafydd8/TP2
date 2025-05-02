@@ -118,6 +118,22 @@ def calculate_racha_early_finish(df):
             df.at[i, 'racha_early_finish'] = df.at[i-1, 'racha_early_finish'] + 1
     return df
 
+def calculate_racha_skips_prev(df):
+    df['racha_skips_prev'] = 0
+    for i in range(1, len(df)):
+        target_prev = df.at[i-1, 'TARGET']
+        ts_actual = df.at[i, 'ts']
+        ts_anterior = df.at[i-1, 'ts']
+        duracion = df.at[i, 'duration_ms']
+        try:
+            d = pd.Timedelta(milliseconds=duracion)
+            son_pegadas = ts_actual - ts_anterior < pd.Timedelta(minutes=9)
+            if son_pegadas and (not pd.isna(target_prev) and target_prev):
+                df.at[i, 'racha_skips_prev'] = df.at[i-1, 'racha_skips_prev'] + 1
+        except:
+            continue
+    return df
+
 def get_spotify_auth():
     '''
     Configura la autenticación de Spotify utilizando Spotipy y devuelve el objeto de autenticación.
@@ -223,7 +239,7 @@ def procesar_df(df, diccionario):
     get_is_iphone(df)
     df = calculate_durations(df, diccionario)
     df = calculate_is_early_finish(df)
-    df = calculate_racha_early_finish(df)
+    df = calculate_racha_skips_prev(df)
     df = encode_reasons_muchas(df)
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
