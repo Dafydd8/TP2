@@ -60,7 +60,7 @@ def encode_reasons_muchas(df):
     df = pd.concat([df, df_encoded], axis=1)
 
     # Dropear la columna original
-    df = df.drop(columns=['reason_start'])
+    #df = df.drop(columns=['reason_start'])
     return df
 
 def calculate_is_early_finish(df):
@@ -75,13 +75,39 @@ def calculate_is_early_finish(df):
         ts_actual = df.at[i, 'ts']
         ts_anterior = df.at[i-1, 'ts']
         try:
-            reproducciones_seguidas = df.at[i, 'reason_start'] in ['fwdbtn', 'trackdone', 'backbtn', 'trackerror', 'unknown']
             d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
-            if reproducciones_seguidas:
-                if ts_actual-d < ts_anterior:
-                    df.at[i, 'is_early_finish'] = 1
+            if ts_actual - ts_anterior < d - pd.Timedelta(seconds=2):
+                df.at[i, 'is_early_finish'] = 1
+            elif ts_actual - ts_anterior < pd.Timedelta(minutes=9):
+                df.at[i, 'is_early_finish'] = 0
+            elif ts_actual - ts_anterior > pd.Timedelta(minutes=9):
+                df.at[i, 'is_early_finish'] = None
         except:
-            #print('No se encontró duration_ms para la canción')
+            df.at[i, 'is_early_finish'] = None
+            continue
+    return df
+
+def add_ts_anterior(df):
+    '''
+    Requiere: df esta ordenado por 'ts'.
+    Calcula si la canción se terminó antes de lo esperado.
+    Añade una columna 'is_early_finish' al DataFrame 'df'.
+    '''
+    # Inicializamos la columna en 0
+    df['ts_anterior'] = 0
+    df['diferencia'] = 0
+    df['mins'] = 0
+    for i in range(1, len(df)):
+        ts_actual = df.at[i, 'ts']
+        ts_anterior = df.at[i-1, 'ts']
+        dif = ts_actual - ts_anterior
+        df.at[i, 'ts_anterior'] = ts_anterior
+        df.at[i, 'diferencia'] = dif
+        
+        try:
+            d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
+            df.at[i, 'mins'] = d
+        except:
             continue
     return df
 
@@ -263,7 +289,7 @@ def procesar_df(df, diccionario):
     get_is_iphone(df)
     df = calculate_durations(df, diccionario)
     df = calculate_is_early_finish(df)
-    df = calculate_racha_early_finish(df)
+    #df = calculate_racha_early_finish(df)
     df = encode_reasons_muchas(df)
     #df = racha_razon_hasta_ahora(df, 'fwdbtn')
     #df = racha_razon_hasta_ahora(df, 'trackdone')
@@ -275,6 +301,24 @@ def procesar_df(df, diccionario):
     # df = calculate_prop_reason_periodo_rolling(df, 10, 'fwdbtn')
     # df = calculate_prop_reason_periodo_rolling(df, 10, 'trackdone')
     # df = calculate_prop_reason_periodo_rolling(df, 10, 'playbtn')
+    df = get_proporciones(df)
+    df = comb_polinom(df, ['hour', 'day_of_week'])
+    return df
+
+
+def procesar_df_2(df, diccionario):
+    '''
+    Procesa el DataFrame 'df' aplicando las funciones de separación de tiempo, codificación de razones,
+    cálculo de rachas, obtención de duraciones y combinaciones polinómicas.
+    DF QUEDA ORDEADO POR 'ts'!
+    '''
+    df = df.drop(columns=['username', 'conn_country', 'user_agent_decrypted'])
+    df = sort_by_ts(df)
+    separate_ts(df)
+    get_is_iphone(df)
+    df = calculate_durations(df, diccionario)
+    #df = calculate_is_early_finish(df)
+    df = encode_reasons_muchas(df)
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
     return df
