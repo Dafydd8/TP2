@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from sklearn.preprocessing import PolynomialFeatures
@@ -28,6 +29,32 @@ def separate_ts(df):
     # Extraer el año
     df['year'] = df['ts'].dt.year - 2000
     return
+
+def get_artist_genre(df):
+    '''
+    Crea una columna 'artist_genre' que indica el género del artista.
+    '''
+    refes = pd.read_csv('artist_genre_macro.csv')
+    df = df.merge(
+        refes[['master_metadata_album_artist_name', 'macro_genre']],
+        on='master_metadata_album_artist_name',
+        how='left'
+    )
+    return df
+
+def encode_genre(df):
+    '''
+    Codifica la columna 'macro_genre' con One Hot Encoding.
+    '''
+    expected_columns = ['genre_Pop/Rock', 'genre_Urban', 'genre_Electronica', 'genre_Regional', 'genre_Otros', 'genre_unknown']
+    # Aplicar One-Hot Encoding a razon de reproduccion
+    df_encoded = pd.get_dummies(df['macro_genre'], prefix='genre', dummy_na=False)
+    for col in expected_columns:
+        if col not in df_encoded.columns:
+            df_encoded[col] = 0
+    df_encoded = df_encoded[expected_columns]
+    df = pd.concat([df, df_encoded], axis=1)
+    return df
 
 def get_is_iphone(df):
     '''
@@ -64,27 +91,25 @@ def encode_reasons_muchas(df):
     return df
 
 def calculate_is_early_finish(df):
-    '''
+    """
     Requiere: df esta ordenado por 'ts'.
     Calcula si la canción se terminó antes de lo esperado.
     Añade una columna 'is_early_finish' al DataFrame 'df'.
-    '''
-    # Inicializamos la columna en 0
-    df['is_early_finish'] = 0
-    for i in range(1, len(df)):
-        ts_actual = df.at[i, 'ts']
-        ts_anterior = df.at[i-1, 'ts']
-        try:
-            d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
-            if ts_actual - ts_anterior < d - pd.Timedelta(seconds=2):
-                df.at[i, 'is_early_finish'] = 1
-            elif ts_actual - ts_anterior < pd.Timedelta(minutes=9):
-                df.at[i, 'is_early_finish'] = 0
-            elif ts_actual - ts_anterior > pd.Timedelta(minutes=9):
-                df.at[i, 'is_early_finish'] = None
-        except:
-            df.at[i, 'is_early_finish'] = None
-            continue
+    """
+    df = df.copy()
+    df['dur_td'] = pd.to_timedelta(df['duration_ms'], unit='ms')
+    df['delta'] = df['ts'].diff()
+    cond_early = df['delta'] < (df['dur_td'] - pd.Timedelta(seconds=2))
+    cond_normal = df['delta'] < pd.Timedelta(minutes=9)
+    cond_gap = df['delta'] > pd.Timedelta(minutes=9)
+    df['is_early_finish'] = np.select(
+        [cond_early, cond_normal, cond_gap],
+        [1, 0, np.nan],
+        default=np.nan  # por si hay deltas negativos o NaT
+    )
+    df.loc[0, 'is_early_finish'] = 0
+    df.drop(columns=['dur_td', 'delta'], inplace=True)
+
     return df
 
 def add_ts_anterior(df):
@@ -103,12 +128,32 @@ def add_ts_anterior(df):
         dif = ts_actual - ts_anterior
         df.at[i, 'ts_anterior'] = ts_anterior
         df.at[i, 'diferencia'] = dif
-        
         try:
             d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
             df.at[i, 'mins'] = d
         except:
             continue
+    return df
+
+def calculate_prev_is_true(df):
+    df = df.copy()
+    df['delta'] = df['ts'].diff()
+    prev_target = df['TARGET'].shift(1)
+    cond = (df['delta'] < pd.Timedelta(minutes=9)) & (prev_target == 1)
+    df['prev_is_true'] = cond.astype(int).fillna(0)
+    df.drop(columns=['delta'], inplace=True)
+    return df
+
+def calculate_racha_tipo(df):
+    df = df.copy()
+    prev_racha = df['racha_skips_prev'].shift(1).fillna(0)
+    cond_1_299 = (prev_racha >= 4) & (prev_racha < 10)
+    cond_ge_300 = (prev_racha >= 10)
+    df['racha_tipo'] = np.select(
+        [cond_1_299, cond_ge_300],
+        [1, 2],
+        default=0
+    )
     return df
 
 def calculate_racha_early_finish(df):
@@ -128,7 +173,9 @@ def calculate_racha_skips_prev(df):
         try:
             d = pd.Timedelta(milliseconds=duracion)
             son_pegadas = ts_actual - ts_anterior < pd.Timedelta(minutes=9)
-            if son_pegadas and (not pd.isna(target_prev) and target_prev):
+            if son_pegadas and pd.isna(target_prev):
+                df.at[i, 'racha_skips_prev'] = df.at[i-1, 'racha_skips_prev']
+            elif son_pegadas and (not pd.isna(target_prev) and target_prev):
                 df.at[i, 'racha_skips_prev'] = df.at[i-1, 'racha_skips_prev'] + 1
         except:
             continue
@@ -238,8 +285,12 @@ def procesar_df(df, diccionario):
     separate_ts(df)
     get_is_iphone(df)
     df = calculate_durations(df, diccionario)
+    #df = get_artist_genre(df)
+    #df = encode_genre(df)
     df = calculate_is_early_finish(df)
     df = calculate_racha_skips_prev(df)
+    #df = calculate_racha_skips_prev(df)
+    #df = calculate_racha_tipo(df)
     df = encode_reasons_muchas(df)
     df = get_proporciones(df)
     df = comb_polinom(df, ['hour', 'day_of_week'])
@@ -257,6 +308,8 @@ def procesar_df_2(df, diccionario):
     separate_ts(df)
     get_is_iphone(df)
     df = calculate_durations(df, diccionario)
+    #df = get_artist_genre(df)
+    #df = encode_genre(df)
     #df = calculate_is_early_finish(df)
     df = encode_reasons_muchas(df)
     df = get_proporciones(df)
