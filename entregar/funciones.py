@@ -84,11 +84,8 @@ def encode_reasons_muchas(df):
     # 
     df_encoded = df_encoded[expected_columns]
 
-    # Concatenar el dfFrame original con el nuevo dfFrame de variables codificadas
+    # Concatenar el dfFrame original con el nuevo df de variables codificadas
     df = pd.concat([df, df_encoded], axis=1)
-
-    # Dropear la columna original
-    #df = df.drop(columns=['reason_start'])
     return df
 
 def calculate_is_early_finish(df):
@@ -113,57 +110,6 @@ def calculate_is_early_finish(df):
 
     return df
 
-def add_ts_anterior(df):
-    '''
-    Requiere: df esta ordenado por 'ts'.
-    Calcula si la canción se terminó antes de lo esperado.
-    Añade una columna 'is_early_finish' al DataFrame 'df'.
-    '''
-    # Inicializamos la columna en 0
-    df['ts_anterior'] = 0
-    df['diferencia'] = 0
-    df['mins'] = 0
-    for i in range(1, len(df)):
-        ts_actual = df.at[i, 'ts']
-        ts_anterior = df.at[i-1, 'ts']
-        dif = ts_actual - ts_anterior
-        df.at[i, 'ts_anterior'] = ts_anterior
-        df.at[i, 'diferencia'] = dif
-        try:
-            d = pd.Timedelta(milliseconds=df.at[i, 'duration_ms'])
-            df.at[i, 'mins'] = d
-        except:
-            continue
-    return df
-
-def calculate_prev_is_true(df):
-    df = df.copy()
-    df['delta'] = df['ts'].diff()
-    prev_target = df['TARGET'].shift(1)
-    cond = (df['delta'] < pd.Timedelta(minutes=9)) & (prev_target == 1)
-    df['prev_is_true'] = cond.astype(int).fillna(0)
-    df.drop(columns=['delta'], inplace=True)
-    return df
-
-def calculate_racha_tipo(df):
-    df = df.copy()
-    prev_racha = df['racha_skips_prev'].shift(1).fillna(0)
-    cond_1_299 = (prev_racha >= 4) & (prev_racha < 10)
-    cond_ge_300 = (prev_racha >= 10)
-    df['racha_tipo'] = np.select(
-        [cond_1_299, cond_ge_300],
-        [1, 2],
-        default=0
-    )
-    return df
-
-def calculate_racha_early_finish(df):
-    df['racha_early_finish'] = 0
-    for i in range(1, len(df)):
-        if not pd.isna(df.at[i, 'is_early_finish']) and df.at[i, 'is_early_finish'] == 1:
-            df.at[i, 'racha_early_finish'] = df.at[i-1, 'racha_early_finish'] + 1
-    return df
-
 def calculate_racha_skips_prev(df):
     df['racha_skips_prev'] = 0
     for i in range(1, len(df)):
@@ -172,7 +118,6 @@ def calculate_racha_skips_prev(df):
         ts_anterior = df.at[i-1, 'ts']
         duracion = df.at[i, 'duration_ms']
         try:
-            d = pd.Timedelta(milliseconds=duracion)
             son_pegadas = ts_actual - ts_anterior < pd.Timedelta(minutes=9)
             if son_pegadas and pd.isna(target_prev):
                 df.at[i, 'racha_skips_prev'] = df.at[i-1, 'racha_skips_prev']

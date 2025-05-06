@@ -147,7 +147,8 @@ Los hallazgos principales son:
 
 Este análisis parece indicar que \texttt{reason\_start} es una variable muy informativa respecto del comportamiento del usuario, y justifica su inclusión en el modelo.
 
-\section*{Variables creadas}
+\section*{Modelo final}
+\subsection*{Variables creadas}
 
 A partir del atributo \texttt{ts} (timestamp), creamos los atributos \texttt{hour}, \texttt{day\_of\_week}, \texttt{month} y \texttt{year}, que indican la hora, día de la semana (donde 0 es lunes y 6 es domingo), mes y año en que finalizó la reproducción.
 
@@ -168,6 +169,20 @@ La variable \texttt{hour\_day\_of\_week} se obtuvo como combinación polinómica
 Adicionalmente, se obtuvo el género musical de cada artista, agrupado en 6 categorías: \textit{Pop/Rock}, \textit{Urban}, \textit{Electronica}, \textit{Regional}, \textit{Otros} y \textit{Unknown}. Para lograr esto, se utilizó la API de Spotify para obtener el ID del artista a partir del URI del track, y luego se consultaron los géneros asociados. Con ayuda de ChatGPT se agruparon las respuestas en las 6 macro-categorías. El proceso está documentado en el siguiente enlace: \texttt{https://chatgpt.com/share/68198985-5d44-800c-801c-42031350eeb0}.
 
 Sin embargo, mediante validación se observó que esta variable no mejoraba el rendimiento del modelo y contribuía al sobreajuste (mejor desempeño en entrenamiento, pero peor en validación). Por esta razón, fue descartada en la versión final del modelo.
+
+\subsection*{Funcionamiento general del modelo}
+El modelo se apoya fuertemente en la temporalidad y en las características contextuales de los datos. La idea general es aprovechar la idea de que, si el usuario está en un momento de indecisión (realizando muchos skips seguidos), es más probable que también saltee esta observación. Por el contrario, si viene en una seguidilla de escuchar canciones completas, es más probable que también escuche completa la actual.
+
+Para realizar una predicción para subir a la plataforma, se lleva a cabo el siguiente proceso:
+\begin{itemize}
+	\item Se entrena el modelo de XGBoost con la totalidad de los datos disponibles. A esos datos, se les aplica el procesamiento llevado a cabo por la función \texttt{procesar\_df()}.
+	\item Se calculan las mismas columnas sobre los datos de submission, como se explicó en la sección "Variables creadas".
+	\item Se utiliza el modelo para predecir las probabilidades de que la reproducción sea efectivamente skippeada.
+\end{itemize}
+
+Cabe mencionar que nos permitimos utilizar la variable \texttt{TARGET} para calcular \texttt{racha\_skips\_prev}, dado que en un contexto de la vida real serían datos disponibles. Al yo recibir una observación nueva, tengo la información de si las anteriores fueron skips o no. Por lo tanto es información que puedo usar para mi modelo.
+
+Esta dinámica es la que se busca replicar al insertar las observaciones de submission con las de entrenamiento para calcular \texttt{racha\_skips\_prev}, insertarlas cronológicamente donde iban y calcular la racha desde ahí.
 
 \section*{Estrategias de validación}
 
